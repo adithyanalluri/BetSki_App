@@ -5,9 +5,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 directories = [
-    "data/raw/.gitkeep",
-    "data/processed/.gitkeep",
-    "data/predictions/.gitkeep",
+    "data/raw",
+    "data/processed",
+    "data/predictions",
     "src/data",
     "src/features",
     "src/models",
@@ -15,15 +15,31 @@ directories = [
     "src/explain",
     "src/services",
     "src/api",
-    "app/.gitkeep",
+    "app",
     "artifacts",
+    "tests",
+    "notebooks",
+]
+
+gitkeep_files = [
+    "data/.gitkeep",
+    "data/raw/.gitkeep",
+    "data/processed/.gitkeep",
+    "data/predictions/.gitkeep",
+    "app/.gitkeep",
+    "artifacts/.gitkeep",
     "tests/.gitkeep",
     "notebooks/.gitkeep",
 ]
 
+
 for directory in directories:
     path = ROOT / directory
     path.mkdir(parents=True, exist_ok=True)
+
+for file_path in gitkeep_files:
+    (ROOT / file_path).touch(exist_ok=True)
+
 
 src_subdirs = [
     "src/data",
@@ -75,9 +91,15 @@ ENV/
 # Data and artifacts
 data/*
 !data/.gitkeep
+!data/raw/
+!data/raw/.gitkeep
+!data/processed/
+!data/processed/.gitkeep
+!data/predictions/
+!data/predictions/.gitkeep
+
 artifacts/*
 !artifacts/.gitkeep
-
 # IDE
 .vscode/
 .idea/
