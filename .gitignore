@@ -21,6 +21,13 @@ ENV/
 # Data and artifacts
 data/*
 !data/.gitkeep
+!data/raw/
+!data/raw/.gitkeep
+!data/processed/
+!data/processed/.gitkeep
+!data/predictions/
+!data/predictions/.gitkeep
+
 artifacts/*
 !artifacts/.gitkeep
 
