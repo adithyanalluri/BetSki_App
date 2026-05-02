@@ -41,6 +41,9 @@ def validate_prediction_response(response: dict[str, Any]) -> None:
         "home_win_probability",
         "away_win_probability",
         "predicted_winner",
+        "risk_score",
+        "risk_level",
+        "reasons",
     }
     missing_keys = required_keys.difference(response)
     if missing_keys:
@@ -70,6 +73,20 @@ def validate_prediction_response(response: dict[str, Any]) -> None:
             f"{response['predicted_winner']}"
         )
 
+    risk_score = response["risk_score"]
+    if not 1 <= risk_score <= 10:
+        raise ValueError(f"risk_score must be between 1 and 10: {risk_score}")
+
+    if response["risk_level"] not in {"Low", "Moderate", "High"}:
+        raise ValueError(f"Unexpected risk_level: {response['risk_level']}")
+
+    reasons = response["reasons"]
+    if not isinstance(reasons, list):
+        raise TypeError("PredictionService reasons must be a list.")
+
+    if not reasons:
+        raise ValueError("PredictionService reasons must contain at least one item.")
+
 
 def main() -> None:
     game_id = load_sample_game_id()
@@ -86,6 +103,9 @@ def main() -> None:
     print(f"home_win_probability: {response['home_win_probability']:.4f}")
     print(f"away_win_probability: {response['away_win_probability']:.4f}")
     print(f"predicted_winner: {response['predicted_winner']}")
+    print(f"risk_score: {response['risk_score']}")
+    print(f"risk_level: {response['risk_level']}")
+    print(f"reasons: {response['reasons']}")
     print("\nPredictionService verification passed.")
 
 

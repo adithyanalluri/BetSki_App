@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import FEATURE_COLUMNS_PATH, MODEL_PATH, PROCESSED_DATA_DIR  # noqa: E402
+from src.explain.explanation_engine import ExplanationEngine  # noqa: E402
 from src.risk.risk_engine import REQUIRED_CONTEXT_COLUMNS, RiskEngine  # noqa: E402
 
 
@@ -40,6 +41,7 @@ class PredictionService:
         self.feature_columns = self._load_feature_columns()
         self.features = self._load_features()
         self.risk_engine = RiskEngine()
+        self.explanation_engine = ExplanationEngine()
         self._validate_feature_columns_present()
         self._validate_risk_columns_present()
 
@@ -57,6 +59,16 @@ class PredictionService:
         risk = self.risk_engine.calculate_risk(
             self._build_risk_input(game, home_probability)
         )
+        explanation = self.explanation_engine.generate_explanation(
+            self._build_explanation_input(
+                game=game,
+                home_win_probability=home_probability,
+                away_win_probability=away_probability,
+                predicted_winner=predicted_winner,
+                risk_score=risk["risk_score"],
+                risk_level=risk["risk_level"],
+            )
+        )
 
         return {
             "game_id": str(game["game_id"]),
@@ -68,6 +80,7 @@ class PredictionService:
             "predicted_winner": predicted_winner,
             "risk_score": risk["risk_score"],
             "risk_level": risk["risk_level"],
+            "reasons": explanation["reasons"],
         }
 
     def _validate_required_files(self) -> None:
@@ -146,6 +159,32 @@ class PredictionService:
             risk_input[column] = game[column]
 
         return risk_input
+
+    def _build_explanation_input(
+        self,
+        game: pd.Series,
+        home_win_probability: float,
+        away_win_probability: float,
+        predicted_winner: str,
+        risk_score: int,
+        risk_level: str,
+    ) -> dict[str, Any]:
+        explanation_input: dict[str, Any] = {
+            "home_team": str(game["home_team"]),
+            "away_team": str(game["away_team"]),
+            "home_win_probability": home_win_probability,
+            "away_win_probability": away_win_probability,
+            "predicted_winner": predicted_winner,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+        }
+
+        for column in REQUIRED_CONTEXT_COLUMNS:
+            if column == "home_win_probability":
+                continue
+            explanation_input[column] = game[column]
+
+        return explanation_input
 
     def _get_game_row(self, game_id: str) -> pd.Series:
         matches = self.features[self.features["game_id"] == str(game_id)]
