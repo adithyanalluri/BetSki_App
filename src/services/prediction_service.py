@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import FEATURE_COLUMNS_PATH, MODEL_PATH, PROCESSED_DATA_DIR  # noqa: E402
+from src.risk.risk_engine import REQUIRED_CONTEXT_COLUMNS, RiskEngine  # noqa: E402
 
 
 SEASON_SLUG = "2023_24"
@@ -38,7 +39,9 @@ class PredictionService:
         self.model = self._load_model()
         self.feature_columns = self._load_feature_columns()
         self.features = self._load_features()
+        self.risk_engine = RiskEngine()
         self._validate_feature_columns_present()
+        self._validate_risk_columns_present()
 
     def predict_by_game_id(self, game_id: str) -> dict[str, Any]:
         """Predict home and away win probabilities for a historical game."""
@@ -51,6 +54,9 @@ class PredictionService:
         home_team = str(game["home_team"])
         away_team = str(game["away_team"])
         predicted_winner = home_team if home_probability >= 0.5 else away_team
+        risk = self.risk_engine.calculate_risk(
+            self._build_risk_input(game, home_probability)
+        )
 
         return {
             "game_id": str(game["game_id"]),
@@ -60,6 +66,8 @@ class PredictionService:
             "home_win_probability": home_probability,
             "away_win_probability": away_probability,
             "predicted_winner": predicted_winner,
+            "risk_score": risk["risk_score"],
+            "risk_level": risk["risk_level"],
         }
 
     def _validate_required_files(self) -> None:
@@ -113,6 +121,31 @@ class PredictionService:
                 "Feature dataset is missing columns required by the model: "
                 f"{missing}"
             )
+
+    def _validate_risk_columns_present(self) -> None:
+        risk_feature_columns = set(REQUIRED_CONTEXT_COLUMNS) - {"home_win_probability"}
+        missing_columns = risk_feature_columns.difference(self.features.columns)
+
+        if missing_columns:
+            missing = ", ".join(sorted(missing_columns))
+            raise ValueError(
+                "Feature dataset is missing columns required by RiskEngine: "
+                f"{missing}"
+            )
+
+    def _build_risk_input(
+        self,
+        game: pd.Series,
+        home_win_probability: float,
+    ) -> dict[str, Any]:
+        risk_input: dict[str, Any] = {"home_win_probability": home_win_probability}
+
+        for column in REQUIRED_CONTEXT_COLUMNS:
+            if column == "home_win_probability":
+                continue
+            risk_input[column] = game[column]
+
+        return risk_input
 
     def _get_game_row(self, game_id: str) -> pd.Series:
         matches = self.features[self.features["game_id"] == str(game_id)]
