@@ -13,9 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from config import PROCESSED_DATA_DIR  # noqa: E402
 
 
-SEASON_SLUG = "2023_24"
-CLEAN_GAMES_FILE = PROCESSED_DATA_DIR / f"clean_games_{SEASON_SLUG}.csv"
-FINAL_GAMES_FILE = PROCESSED_DATA_DIR / f"final_games_{SEASON_SLUG}.csv"
+CLEAN_GAMES_PATTERN = "clean_games_*.csv"
+ALL_GAMES_FILE = PROCESSED_DATA_DIR / "all_games.csv"
 EXPECTED_COLUMNS = [
     "game_id",
     "game_date",
@@ -48,6 +47,7 @@ def _enforce_types(games: pd.DataFrame) -> pd.DataFrame:
     games["game_date"] = pd.to_datetime(games["game_date"], errors="coerce")
     games["home_points"] = pd.to_numeric(games["home_points"], errors="coerce")
     games["away_points"] = pd.to_numeric(games["away_points"], errors="coerce")
+    games["season"] = games["season"].astype(str)
     games["home_win"] = pd.to_numeric(games["home_win"], errors="coerce")
 
     return games
@@ -86,17 +86,27 @@ def _validate_final_dataset(games: pd.DataFrame) -> None:
         raise ValueError(f"Found {invalid_home_win.sum()} rows with invalid home_win.")
 
 
-def build_dataset(
-    input_path: Path = CLEAN_GAMES_FILE,
-    output_path: Path = FINAL_GAMES_FILE,
-) -> pd.DataFrame:
+def _read_clean_games(input_path: Path) -> pd.DataFrame:
     print(f"Reading cleaned games from {input_path}")
     games = pd.read_csv(input_path, dtype={"game_id": str})
     print(f"Input shape: {games.shape}")
 
     games = _enforce_schema(games)
-    games = _enforce_types(games)
+    return _enforce_types(games)
 
+
+def build_dataset(
+    processed_data_dir: Path = PROCESSED_DATA_DIR,
+    output_path: Path = ALL_GAMES_FILE,
+) -> pd.DataFrame:
+    input_paths = sorted(processed_data_dir.glob(CLEAN_GAMES_PATTERN))
+    if not input_paths:
+        raise FileNotFoundError(f"No cleaned game files found in {processed_data_dir}")
+
+    games = pd.concat(
+        [_read_clean_games(input_path) for input_path in input_paths],
+        ignore_index=True,
+    )
     games = games.sort_values(["game_date", "game_id"]).reset_index(drop=True)
 
     games["home_points"] = games["home_points"].astype("int64")
@@ -106,11 +116,22 @@ def build_dataset(
     _validate_final_dataset(games)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    games = games.loc[:, EXPECTED_COLUMNS]
     games.to_csv(output_path, index=False, date_format="%Y-%m-%d")
 
+    rows_per_season = games.groupby("season").size().sort_index()
+    seasons = list(rows_per_season.index)
+    min_date = games["game_date"].min().date()
+    max_date = games["game_date"].max().date()
+
+    print("\nBuild summary")
+    print(f"Seasons included: {', '.join(seasons)}")
+    print("Rows per season:")
+    print(rows_per_season.to_string())
+    print(f"Total rows: {len(games)}")
+    print(f"Date range: {min_date} to {max_date}")
     print(f"Output shape: {games.shape}")
-    print(f"Rows validated: {len(games)}")
-    print(f"Saved final dataset to {output_path}")
+    print(f"Saved combined dataset to {output_path}")
 
     return games
 

@@ -7,10 +7,27 @@ import pandas as pd
 from nba_api.stats.endpoints import LeagueGameFinder
 
 
-DEFAULT_SEASON = "2023-24"
+SEASONS = [
+    "2018-19",
+    "2019-20",
+    "2020-21",
+    "2021-22",
+    "2022-23",
+    "2023-24",
+    "2024-25",
+]
 SEASON_TYPE = "Regular Season"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
+EXPECTED_COLUMNS = [
+    "game_id",
+    "game_date",
+    "home_team",
+    "away_team",
+    "home_points",
+    "away_points",
+    "season",
+]
 
 
 def fetch_team_game_logs(season: str) -> pd.DataFrame:
@@ -89,18 +106,7 @@ def structure_game_rows(team_games: pd.DataFrame, season: str) -> pd.DataFrame:
             }
         )
 
-    result = pd.DataFrame(
-        structured_games,
-        columns=[
-            "game_id",
-            "game_date",
-            "home_team",
-            "away_team",
-            "home_points",
-            "away_points",
-            "season",
-        ],
-    )
+    result = pd.DataFrame(structured_games, columns=EXPECTED_COLUMNS)
 
     result = result.dropna()
     result = result.drop_duplicates(subset=["game_id"], keep="first")
@@ -124,7 +130,7 @@ def save_raw_games(games: pd.DataFrame, season: str) -> Path:
     return output_path
 
 
-def fetch_and_save_games(season: str = DEFAULT_SEASON) -> Path:
+def fetch_and_save_games(season: str) -> Path:
     team_games = fetch_team_game_logs(season)
     games = structure_game_rows(team_games, season)
 
@@ -135,18 +141,49 @@ def fetch_and_save_games(season: str = DEFAULT_SEASON) -> Path:
     return save_raw_games(games, season)
 
 
+def fetch_and_save_all_games(seasons: list[str] | None = None) -> list[Path]:
+    """Fetch configured NBA seasons, allowing individual seasons to fail."""
+    seasons = seasons or SEASONS
+    saved_paths: list[Path] = []
+    failures: dict[str, str] = {}
+
+    print(f"Fetching {len(seasons)} NBA seasons: {', '.join(seasons)}")
+    for season in seasons:
+        print(f"\n=== Season {season} ===")
+        try:
+            saved_paths.append(fetch_and_save_games(season))
+        except Exception as exc:  # noqa: BLE001
+            failures[season] = str(exc)
+            print(f"Failed to fetch season {season}: {exc}")
+
+    print("\nFetch summary")
+    print(f"Successful seasons: {len(saved_paths)}")
+    print(f"Failed seasons: {len(failures)}")
+    for season, message in failures.items():
+        print(f"- {season}: {message}")
+
+    if not saved_paths:
+        raise RuntimeError("No seasons were fetched successfully.")
+
+    return saved_paths
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch one NBA season of raw historical game results."
+        description="Fetch configured NBA seasons of raw historical game results."
     )
     parser.add_argument(
         "--season",
-        default=DEFAULT_SEASON,
-        help=f"NBA season in YYYY-YY format. Defaults to {DEFAULT_SEASON}.",
+        action="append",
+        dest="seasons",
+        help=(
+            "NBA season in YYYY-YY format. Can be passed more than once. "
+            "Defaults to the configured SEASONS list."
+        ),
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    fetch_and_save_games(args.season)
+    fetch_and_save_all_games(args.seasons)

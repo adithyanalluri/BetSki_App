@@ -13,8 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from config import PROCESSED_DATA_DIR  # noqa: E402
 
 
-SEASON_SLUG = "2023_24"
-FINAL_GAMES_FILE = PROCESSED_DATA_DIR / f"final_games_{SEASON_SLUG}.csv"
+ALL_GAMES_FILE = PROCESSED_DATA_DIR / "all_games.csv"
 REQUIRED_COLUMNS = [
     "game_id",
     "game_date",
@@ -22,6 +21,8 @@ REQUIRED_COLUMNS = [
     "away_team",
     "home_points",
     "away_points",
+    "season",
+    "home_win",
 ]
 ROLLING_FEATURE_COLUMNS = [
     "last_5_win_pct",
@@ -31,8 +32,8 @@ ROLLING_FEATURE_COLUMNS = [
 ]
 
 
-def load_final_games(input_path: Path = FINAL_GAMES_FILE) -> pd.DataFrame:
-    """Load the final game-level dataset for one NBA season."""
+def load_all_games(input_path: Path = ALL_GAMES_FILE) -> pd.DataFrame:
+    """Load the multi-season game-level dataset."""
     games = pd.read_csv(input_path, dtype={"game_id": str})
     return _prepare_games(games)
 
@@ -48,6 +49,8 @@ def _prepare_games(games: pd.DataFrame) -> pd.DataFrame:
     games["game_date"] = pd.to_datetime(games["game_date"], errors="coerce")
     games["home_points"] = pd.to_numeric(games["home_points"], errors="coerce")
     games["away_points"] = pd.to_numeric(games["away_points"], errors="coerce")
+    games["season"] = games["season"].astype(str)
+    games["home_win"] = pd.to_numeric(games["home_win"], errors="coerce")
 
     if games[REQUIRED_COLUMNS].isna().any().any():
         missing_counts = games[REQUIRED_COLUMNS].isna().sum()
@@ -57,7 +60,7 @@ def _prepare_games(games: pd.DataFrame) -> pd.DataFrame:
             f"{missing_counts.to_string()}"
         )
 
-    return games
+    return games.sort_values(["game_date", "game_id"]).reset_index(drop=True)
 
 
 def build_team_game_history(games: pd.DataFrame) -> pd.DataFrame:
@@ -98,7 +101,11 @@ def build_team_game_history(games: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_rolling_team_features(team_games: pd.DataFrame) -> pd.DataFrame:
-    """Calculate pre-game rolling features for each team."""
+    """Calculate pre-game rolling features for each team.
+
+    Each source series is shifted by one team game before rolling, so the current
+    game result is never included in its own features.
+    """
     team_games = team_games.sort_values(["team", "game_date", "game_id"]).copy()
     grouped = team_games.groupby("team", group_keys=False)
 
@@ -147,7 +154,7 @@ def build_rolling_features(games: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    games = load_final_games()
+    games = load_all_games()
     rolling_features = build_rolling_features(games)
 
     team_count = rolling_features.index.get_level_values("team").nunique()

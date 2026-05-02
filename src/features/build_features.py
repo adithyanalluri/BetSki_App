@@ -12,15 +12,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from config import PROCESSED_DATA_DIR  # noqa: E402
 from src.features.rolling_features import (  # noqa: E402
-    FINAL_GAMES_FILE,
+    ALL_GAMES_FILE,
     build_rolling_features,
     build_team_game_history,
-    load_final_games,
+    load_all_games,
 )
 
 
-SEASON_SLUG = "2023_24"
-FEATURES_FILE = PROCESSED_DATA_DIR / f"features_{SEASON_SLUG}.csv"
+FEATURES_FILE = PROCESSED_DATA_DIR / "features_all_seasons.csv"
+REST_DAY_CAP = 7
 BASE_COLUMNS = [
     "game_id",
     "game_date",
@@ -28,6 +28,7 @@ BASE_COLUMNS = [
     "away_team",
     "home_points",
     "away_points",
+    "season",
     "home_win",
 ]
 REST_FEATURE_COLUMNS = ["rest_days", "back_to_back"]
@@ -56,6 +57,7 @@ def build_rest_features(games: pd.DataFrame) -> pd.DataFrame:
     team_games["rest_days"] = (
         team_games["game_date"] - previous_game_date
     ).dt.days
+    team_games["rest_days"] = team_games["rest_days"].clip(lower=0, upper=REST_DAY_CAP)
     team_games["back_to_back"] = (team_games["rest_days"] == 1).astype(int)
 
     return (
@@ -115,6 +117,8 @@ def build_feature_dataset(games: pd.DataFrame) -> pd.DataFrame:
     features["home_points"] = features["home_points"].astype("int64")
     features["away_points"] = features["away_points"].astype("int64")
     features["home_win"] = features["home_win"].astype("int64")
+    features["home_rest_days"] = features["home_rest_days"].astype("int64")
+    features["away_rest_days"] = features["away_rest_days"].astype("int64")
     features["home_back_to_back"] = features["home_back_to_back"].astype("int64")
     features["away_back_to_back"] = features["away_back_to_back"].astype("int64")
 
@@ -123,11 +127,11 @@ def build_feature_dataset(games: pd.DataFrame) -> pd.DataFrame:
 
 
 def save_feature_dataset(
-    input_path: Path = FINAL_GAMES_FILE,
+    input_path: Path = ALL_GAMES_FILE,
     output_path: Path = FEATURES_FILE,
 ) -> pd.DataFrame:
-    print(f"Reading final games from {input_path}")
-    games = load_final_games(input_path)
+    print(f"Reading all games from {input_path}")
+    games = load_all_games(input_path)
     print(f"Input shape: {games.shape}")
 
     features = build_feature_dataset(games)
@@ -135,8 +139,17 @@ def save_feature_dataset(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     features.to_csv(output_path, index=False, date_format="%Y-%m-%d")
 
-    print(f"Output shape: {features.shape}")
-    print(f"Rows dropped: {features.attrs['rows_dropped']}")
+    seasons = sorted(features["season"].unique())
+    min_date = features["game_date"].min().date()
+    max_date = features["game_date"].max().date()
+    rows_dropped = features.attrs["rows_dropped"]
+
+    print(f"Input rows: {len(games)}")
+    print(f"Output rows: {len(features)}")
+    print(f"Rows dropped: {rows_dropped}")
+    print(f"Seasons included: {', '.join(seasons)}")
+    print(f"Date range: {min_date} to {max_date}")
+    print(f"Output path: {output_path}")
     print(f"Saved feature dataset to {output_path}")
     print("\nSample output:")
     print(features.head(10).to_string(index=False))

@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config import FEATURE_COLUMNS_PATH, MODEL_PATH, PROCESSED_DATA_DIR  # noqa: E402
+from config import ARTIFACTS_DIR, FEATURE_COLUMNS_PATH, MODEL_PATH, PROCESSED_DATA_DIR  # noqa: E402
 from src.models.predict import (  # noqa: E402
     load_feature_columns,
     load_model,
@@ -19,15 +19,15 @@ from src.models.predict import (  # noqa: E402
 from src.models.train_model import FEATURE_COLUMNS  # noqa: E402
 
 
-SEASON_SLUG = "2023_24"
-FEATURES_FILE = PROCESSED_DATA_DIR / f"features_{SEASON_SLUG}.csv"
+FEATURES_FILE = PROCESSED_DATA_DIR / "features_all_seasons.csv"
+MODEL_METRICS_PATH = ARTIFACTS_DIR / "model_metrics.json"
 PROBABILITY_TOLERANCE = 1e-9
 
 
 def _validate_artifacts_exist() -> None:
     missing_paths = [
         path
-        for path in [MODEL_PATH, FEATURE_COLUMNS_PATH]
+        for path in [MODEL_PATH, FEATURE_COLUMNS_PATH, MODEL_METRICS_PATH]
         if not path.exists()
     ]
 

@@ -13,12 +13,13 @@ def evaluate_classifier(
 ) -> dict[str, float]:
     """Evaluate a binary classifier with probability-aware metrics."""
     y_pred = model.predict(x_test)
-    y_proba = model.predict_proba(x_test)[:, 1]
+    positive_class_index = list(model.classes_).index(1)
+    y_proba = model.predict_proba(x_test)[:, positive_class_index]
 
     return {
-        "accuracy": accuracy_score(y_test, y_pred),
-        "roc_auc": roc_auc_score(y_test, y_proba),
-        "log_loss": log_loss(y_test, y_proba),
+        "accuracy": float(accuracy_score(y_test, y_pred)),
+        "roc_auc": float(roc_auc_score(y_test, y_proba)),
+        "log_loss": float(log_loss(y_test, y_proba)),
     }
 
 

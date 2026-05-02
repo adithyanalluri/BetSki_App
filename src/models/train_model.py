@@ -20,8 +20,8 @@ from config import ARTIFACTS_DIR, FEATURE_COLUMNS_PATH, MODEL_PATH, PROCESSED_DA
 from src.models.evaluate_model import evaluate_classifier, format_metrics_table  # noqa: E402
 
 
-SEASON_SLUG = "2023_24"
-FEATURES_FILE = PROCESSED_DATA_DIR / f"features_{SEASON_SLUG}.csv"
+FEATURES_FILE = PROCESSED_DATA_DIR / "features_all_seasons.csv"
+MODEL_METRICS_PATH = ARTIFACTS_DIR / "model_metrics.json"
 TARGET_COLUMN = "home_win"
 FEATURE_COLUMNS = [
     "home_last_5_win_pct",
@@ -45,7 +45,13 @@ def load_feature_dataset(input_path: Path = FEATURES_FILE) -> pd.DataFrame:
     """Load and validate the feature dataset."""
     games = pd.read_csv(input_path, dtype={"game_id": str})
 
-    required_columns = {"game_id", "game_date", TARGET_COLUMN, *FEATURE_COLUMNS}
+    required_columns = {
+        "game_id",
+        "game_date",
+        "season",
+        TARGET_COLUMN,
+        *FEATURE_COLUMNS,
+    }
     missing_columns = required_columns.difference(games.columns)
     if missing_columns:
         missing = ", ".join(sorted(missing_columns))
@@ -58,7 +64,11 @@ def load_feature_dataset(input_path: Path = FEATURES_FILE) -> pd.DataFrame:
         games[column] = pd.to_numeric(games[column], errors="coerce")
 
     if games.loc[:, ["game_date", TARGET_COLUMN, *FEATURE_COLUMNS]].isna().any().any():
-        missing_counts = games.loc[:, ["game_date", TARGET_COLUMN, *FEATURE_COLUMNS]].isna().sum()
+        missing_counts = (
+            games.loc[:, ["game_date", TARGET_COLUMN, *FEATURE_COLUMNS]]
+            .isna()
+            .sum()
+        )
         missing_counts = missing_counts[missing_counts > 0]
         raise ValueError(
             "Feature dataset contains missing model values:\n"
@@ -72,22 +82,14 @@ def load_feature_dataset(input_path: Path = FEATURES_FILE) -> pd.DataFrame:
     return games.sort_values(["game_date", "game_id"]).reset_index(drop=True)
 
 
-def split_train_test(
-    games: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+def split_train_test(games: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     split_index = int(len(games) * TRAIN_FRACTION)
     if split_index <= 0 or split_index >= len(games):
         raise ValueError("Train/test split produced an empty train or test set.")
 
     train = games.iloc[:split_index]
     test = games.iloc[split_index:]
-
-    x_train = train.loc[:, FEATURE_COLUMNS]
-    y_train = train[TARGET_COLUMN].astype(int)
-    x_test = test.loc[:, FEATURE_COLUMNS]
-    y_test = test[TARGET_COLUMN].astype(int)
-
-    return x_train, x_test, y_train, y_test
+    return train, test
 
 
 def build_models() -> dict[str, object]:
@@ -136,8 +138,10 @@ def train_and_evaluate_models(
 
 def save_artifacts(
     model: object,
+    metrics_payload: dict[str, object],
     model_path: Path = MODEL_PATH,
     feature_columns_path: Path = FEATURE_COLUMNS_PATH,
+    model_metrics_path: Path = MODEL_METRICS_PATH,
 ) -> None:
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, model_path)
@@ -145,14 +149,63 @@ def save_artifacts(
     with feature_columns_path.open("w", encoding="utf-8") as file:
         json.dump(FEATURE_COLUMNS, file, indent=2)
 
+    with model_metrics_path.open("w", encoding="utf-8") as file:
+        json.dump(metrics_payload, file, indent=2)
+
+
+def _date_range(frame: pd.DataFrame) -> dict[str, str]:
+    return {
+        "start": frame["game_date"].min().date().isoformat(),
+        "end": frame["game_date"].max().date().isoformat(),
+    }
+
+
+def _build_metrics_payload(
+    games: pd.DataFrame,
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    selected_model: str,
+    metrics_by_model: dict[str, dict[str, float]],
+) -> dict[str, object]:
+    return {
+        "input_path": str(FEATURES_FILE),
+        "target_column": TARGET_COLUMN,
+        "feature_columns": FEATURE_COLUMNS,
+        "train_fraction": TRAIN_FRACTION,
+        "total_rows": int(len(games)),
+        "train_rows": int(len(train)),
+        "test_rows": int(len(test)),
+        "seasons_included": sorted(games["season"].unique().tolist()),
+        "train_date_range": _date_range(train),
+        "test_date_range": _date_range(test),
+        "selected_model": selected_model,
+        "selection_metric": "log_loss",
+        "metrics_by_model": metrics_by_model,
+    }
+
 
 def main() -> None:
     print(f"Reading feature dataset from {FEATURES_FILE}")
     games = load_feature_dataset()
 
-    x_train, x_test, y_train, y_test = split_train_test(games)
-    print(f"Training rows: {len(x_train)}")
-    print(f"Test rows: {len(x_test)}")
+    train, test = split_train_test(games)
+    x_train = train.loc[:, FEATURE_COLUMNS]
+    y_train = train[TARGET_COLUMN].astype(int)
+    x_test = test.loc[:, FEATURE_COLUMNS]
+    y_test = test[TARGET_COLUMN].astype(int)
+
+    print(f"Total rows: {len(games)}")
+    print(f"Seasons included: {', '.join(sorted(games['season'].unique()))}")
+    print(f"Training rows: {len(train)}")
+    print(f"Test rows: {len(test)}")
+    print(
+        "Train date range: "
+        f"{train['game_date'].min().date()} to {train['game_date'].max().date()}"
+    )
+    print(
+        "Test date range: "
+        f"{test['game_date'].min().date()} to {test['game_date'].max().date()}"
+    )
 
     best_model_name, best_model, metrics_by_model = train_and_evaluate_models(
         x_train=x_train,
@@ -165,9 +218,17 @@ def main() -> None:
     print(format_metrics_table(metrics_by_model))
     print(f"\nSelected best model: {best_model_name}")
 
-    save_artifacts(best_model)
+    metrics_payload = _build_metrics_payload(
+        games=games,
+        train=train,
+        test=test,
+        selected_model=best_model_name,
+        metrics_by_model=metrics_by_model,
+    )
+    save_artifacts(best_model, metrics_payload)
     print(f"Saved model artifact to {MODEL_PATH}")
     print(f"Saved feature columns to {FEATURE_COLUMNS_PATH}")
+    print(f"Saved model metrics to {MODEL_METRICS_PATH}")
 
 
 if __name__ == "__main__":

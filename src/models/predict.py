@@ -48,4 +48,9 @@ def predict_home_win_probability(
         missing = ", ".join(sorted(missing_columns))
         raise ValueError(f"Input row is missing required feature columns: {missing}")
 
-    return float(model.predict_proba(features.loc[:, feature_columns])[:, 1][0])
+    positive_class_index = list(model.classes_).index(1)
+    probability = model.predict_proba(features.loc[:, feature_columns])[
+        :,
+        positive_class_index,
+    ][0]
+    return float(probability)
