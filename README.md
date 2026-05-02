@@ -1,101 +1,82 @@
 # BetSki
 
-BetSki is an NBA analytics and betting-risk system that turns historical game results into leak-safe pre-game features. The project is being built as a production-style Python data pipeline for future win-probability modeling and risk scoring.
+BetSki is an end-to-end NBA prediction and betting-risk application that estimates game win probabilities, assigns risk scores, and explains model outputs in plain language. It combines a complete data pipeline, feature engineering workflow, trained model, FastAPI backend, and Streamlit interface into a portfolio-ready analytics product.
 
-## Current Status
+## Key Features
 
-Feature engineering is complete for the 2023-24 NBA regular season. The model, API, frontend, cloud deployment, and betting-risk layer have not been built yet.
+- Win probability prediction for NBA matchups
+- Risk scoring on a 1-10 scale
+- Human-readable explanations for predictions and risk levels
+- FastAPI backend for serving prediction requests
+- Streamlit UI for interactive game analysis
 
-## Features
+## Demo
 
-Current:
+Demo link coming soon. To run the project locally, start the FastAPI backend and Streamlit frontend, then open the Streamlit app in your browser.
 
-- Fetches historical NBA game results with `nba_api`
-- Stores raw, cleaned, final, and feature-ready datasets locally
-- Validates game schema, dates, teams, duplicates, and scoring fields
-- Builds rolling team features using only games played before each matchup
-- Adds rest-day and back-to-back indicators for home and away teams
+## Screenshots
 
-Planned:
+Add screenshots after running the Streamlit app locally. The main screenshot should show a completed prediction flow, including matchup input, win probability output, risk score, and human-readable explanations.
 
-- Train baseline and advanced game outcome models
-- Estimate win probability and betting risk scores
-- Add explainability for model predictions
-- Integrate player-level, injury, odds, and schedule data
-- Expose predictions through an API and lightweight app
-- Add AWS-based storage and scheduled pipelines
+### Streamlit UI
+
+![Streamlit UI](screenshots/streamlit_ui.png)
+
+### API Response
+
+![API Response](screenshots/api_response.png)
 
 ## Tech Stack
 
 - Python
 - pandas
 - scikit-learn
-- nba_api
 - FastAPI
 - Streamlit
 - joblib
-- python-dotenv
+- nba_api
+
+## How to Run Locally
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start the backend:
+
+```bash
+uvicorn src.api.main:app --reload
+```
+
+Start the frontend:
+
+```bash
+streamlit run src/app.py
+```
 
 ## Project Structure
 
 ```text
 BetSki_App/
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── predictions/
+├── data/                 # Raw, processed, and prediction datasets
+├── artifacts/            # Trained models and reusable outputs
+├── screenshots/          # Demo screenshots for README
 ├── src/
-│   ├── data/
-│   ├── features/
-│   ├── models/
-│   ├── risk/
-│   ├── api/
-│   ├── services/
-│   └── explain/
-├── artifacts/
-├── notebooks/
-├── tests/
-├── config.py
+│   ├── api/              # FastAPI backend
+│   ├── data/             # Data ingestion and cleaning
+│   ├── explain/          # Human-readable explanation engine
+│   ├── features/         # Feature engineering
+│   ├── models/           # Model training and inference
+│   ├── risk/             # Risk scoring engine
+│   └── services/         # Application service layer
+├── tests/                # Project tests
 └── requirements.txt
 ```
 
-## Run Locally
-
-Create and activate a virtual environment:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-Run the data pipeline:
-
-```bash
-python src/data/fetch_games.py
-python src/data/inspect_raw_games.py
-python src/data/clean_games.py
-python src/data/build_dataset.py
-python src/features/rolling_features.py
-python src/features/build_features.py
-```
-
-The feature dataset is generated at:
-
-```text
-data/processed/features_2023_24.csv
-```
-
-## Data Note
-
-Generated datasets and model artifacts are intentionally ignored by git. The repository preserves folder structure with `.gitkeep` files while keeping reproducible outputs local.
-
 ## Future Improvements
 
-- Expand data collection across multiple NBA seasons
-- Add time-aware model training and evaluation
-- Build risk scoring for betting decisions
-- Add player stats, injuries, odds, and market movement
-- Create FastAPI endpoints for predictions
-- Add a Streamlit dashboard
-- Move storage and scheduled jobs to AWS
+- Add player-level data and injury context
+- Train across multiple NBA seasons
+- Deploy the backend and frontend on AWS
